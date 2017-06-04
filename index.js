@@ -1,26 +1,53 @@
 const start = Date.now();
+const log = console.log.bind(console);
 
 const Crawler = require("node-webcrawler");
 const URL = require('url-parse');
+const db = require('./db');
 
+const site = {
+    id : 1,
+    url : 'http://eapermanent.com/'
+};
 
-const startUrl = 'http://eapermanent.com';//';//https://kodi-professional.kz/';// //"https://kodi-professional.ua";
+// getting start url
+//db.query(`SELECT uri FROM site WHERE id = ${site.id}`, (error, results, fields) => {site.url = results.pop().uri;});
 
-const url = new URL(startUrl);
-const baseUrl = url.protocol + "//" + url.hostname;
 
 let pagesVisited = [];
 let exploredPages = [];
 
+const query = db.query(`SELECT uri FROM page WHERE site_id = ${site.id}`, (error, results, fields) => {
+    exploredPages = results.map(row => row.uri);
+});
+
+query.on('end', () => {
+    addToCrawlerQueue(site.url, true);
+    c.queue(exploredPages);
+});
+
+
+
+
+const url = new URL(site.url);
+const baseUrl = url.protocol + "//" + url.hostname;
+
+
+
+
+
 const c = new Crawler({
     maxConnections : 50,
-    rateLimits:305,
+    //rateLimits:305,
     callback : function (error, result, $) {
         if(error){
             console.error(error);
         }else{
             pagesVisited.push(result.options.uri);
-            collectInternalLinks($);
+
+            if ($)
+                collectInternalLinks($);
+
 
             console.log(`PAGE VISITED : ${result.options.uri}\n`);
             console.log(`TOTAL VISITED : ${Object.keys(pagesVisited).length}\n`);
@@ -28,19 +55,15 @@ const c = new Crawler({
     },
     onDrain : function () {
         console.log(`visited pages : ${pagesVisited.length}\n`);
-        //console.log(pagesVisited);
         console.log('Time left : ' + (Date.now() - start)/1000 + 's\n');
+
+        db.destroy();
     }
 });
 
 
-
-
-addToCrawlerQueue(startUrl);
-
-
 // library
-function addToCrawlerQueue(link) {
+function addToCrawlerQueue(link, startUrl = false) {
     //images todo-in так наверно не совсем правильно
     const extension = link.substr(link.length - 4);
 
@@ -55,6 +78,11 @@ function addToCrawlerQueue(link) {
         //console.log(pagesVisited);
         c.queue(link);
         exploredPages.push(link);
+
+        if (!startUrl) {
+            const sql = `INSERT INTO page SET site_id = ${site.id}, uri = ${db.escape(link)}`;
+            db.query(sql);
+        }
 
         console.log(`__explored pages : ${exploredPages.length}\n`);
     }
