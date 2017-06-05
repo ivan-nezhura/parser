@@ -1,5 +1,6 @@
 const start = Date.now();
 const log = console.log.bind(console);
+const fileLog = require('simple-node-logger').createSimpleFileLogger('parser.log');
 
 const Crawler = require("node-webcrawler");
 const URL = require('url-parse');
@@ -7,7 +8,7 @@ const db = require('./db');
 
 const site = {
     id : 1,
-    url : 'http://eapermanent.com/'
+    url : 'http://eapermanent.com/'//https://kodi-professional.ua/'
 };
 
 // getting start url
@@ -18,6 +19,9 @@ let pagesVisited = [];
 let exploredPages = [];
 
 const query = db.query(`SELECT uri FROM page WHERE site_id = ${site.id}`, (error, results, fields) => {
+    if (error)
+        throw error;
+
     exploredPages = results.map(row => row.uri);
 });
 
@@ -37,7 +41,7 @@ const baseUrl = url.protocol + "//" + url.hostname;
 
 
 const c = new Crawler({
-    maxConnections : 50,
+    maxConnections : 100,
     //rateLimits:305,
     callback : function (error, result, $) {
         if(error){
@@ -48,14 +52,13 @@ const c = new Crawler({
             if ($)
                 collectInternalLinks($);
 
-
-            console.log(`PAGE VISITED : ${result.options.uri}\n`);
-            console.log(`TOTAL VISITED : ${Object.keys(pagesVisited).length}\n`);
+            log(`VISITED : ${Object.keys(pagesVisited).length}, REMAINING : ${c.queueSize}, TOTAL EXPLORED NEW : ${exploredPages.length}\n`);
         }
     },
     onDrain : function () {
-        console.log(`visited pages : ${pagesVisited.length}\n`);
-        console.log('Time left : ' + (Date.now() - start)/1000 + 's\n');
+        log('---***--- FINISH ---***---');
+        log(`visited pages : ${pagesVisited.length}\n`);
+        log('Time left : ' + (Date.now() - start)/1000 + 's\n');
 
         db.destroy();
     }
@@ -63,10 +66,9 @@ const c = new Crawler({
 
 
 // library
-function addToCrawlerQueue(link, startUrl = false) {
+function addToCrawlerQueue(link) {
     //images todo-in так наверно не совсем правильно
     const extension = link.substr(link.length - 4);
-
     const conditionToAddToQueue =
         exploredPages.indexOf(link) === -1
         && extension !== '.jpg'
@@ -74,17 +76,19 @@ function addToCrawlerQueue(link, startUrl = false) {
         && extension !== '.gif';
 
     if (conditionToAddToQueue){
-        console.log(`add to queue : ${link}\n`);
+        //log(`add to queue : ${link}\n`);
         //console.log(pagesVisited);
         c.queue(link);
+
         exploredPages.push(link);
 
-        if (!startUrl) {
-            const sql = `INSERT INTO page SET site_id = ${site.id}, uri = ${db.escape(link)}`;
-            db.query(sql);
+        if (link === 'https://kodi-professional.ua/kosmetika-spa/uhod-za-rukami/piling-s-fruktovymi-kislotami-dlya-ruk-i-nog200-ml/') {
+            log('adding ' + link);
         }
 
-        console.log(`__explored pages : ${exploredPages.length}\n`);
+        const sql = `INSERT INTO page SET site_id = ${site.id}, uri = ${db.escape(link)}`;
+        fileLog.info(sql);
+        db.query(sql);
     }
 }
 
