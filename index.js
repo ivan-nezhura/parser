@@ -5,11 +5,22 @@ const fileLog = require('simple-node-logger').createSimpleFileLogger('parser.log
 const Crawler = require("node-webcrawler");
 const URL = require('url-parse');
 const db = require('./db');
+const pageWork = require('./pageWorker');
+
+/*const site = {
+    id : 1,
+    url : 'http://eapermanent.com/'
+};*/
 
 const site = {
-    id : 1,
-    url : 'http://eapermanent.com/'//https://kodi-professional.ua/'
+    id : 2,
+    url : 'https://kodi-professional.kz/'
 };
+
+/*const site = {
+    id : 3,
+    url : 'https://kodi-professional.ua/'
+};*/
 
 // getting start url
 //db.query(`SELECT uri FROM site WHERE id = ${site.id}`, (error, results, fields) => {site.url = results.pop().uri;});
@@ -17,16 +28,18 @@ const site = {
 
 let pagesVisited = [];
 let exploredPages = [];
+let startExplored = 0;
 
 const query = db.query(`SELECT uri FROM page WHERE site_id = ${site.id}`, (error, results, fields) => {
     if (error)
         throw error;
 
     exploredPages = results.map(row => row.uri);
+    startExplored = exploredPages.length;
 });
 
 query.on('end', () => {
-    addToCrawlerQueue(site.url, true);
+    c.queue(site.url);
     c.queue(exploredPages);
 });
 
@@ -41,24 +54,29 @@ const baseUrl = url.protocol + "//" + url.hostname;
 
 
 const c = new Crawler({
-    maxConnections : 100,
-    //rateLimits:305,
+    maxConnections : 250,
+    //rateLimits:100,
     callback : function (error, result, $) {
         if(error){
             console.error(error);
         }else{
             pagesVisited.push(result.options.uri);
 
-            if ($)
-                collectInternalLinks($);
+            // analyse page
+            pageWork(site.id, result, $);
 
-            log(`VISITED : ${Object.keys(pagesVisited).length}, REMAINING : ${c.queueSize}, TOTAL EXPLORED NEW : ${exploredPages.length}\n`);
+            if ($) collectInternalLinks($);
+
+            log(`VISITED : ${Object.keys(pagesVisited).length}, REMAINING : ${c.queueSize}, TOTAL EXPLORED NEW : ${getExploredNew()}\n`);
         }
     },
     onDrain : function () {
-        log('---***--- FINISH ---***---');
+        const sec = (Date.now() - start)/1000;
+
+        log('\n---***--- FINISH ---***---');
         log(`visited pages : ${pagesVisited.length}\n`);
-        log('Time left : ' + (Date.now() - start)/1000 + 's\n');
+        log(`explored new : ${getExploredNew()}\n`);
+        log(`Time left : ${sec}s (${(sec/60).toFixed(2)}m)\n`);
 
         db.destroy();
     }
@@ -66,7 +84,9 @@ const c = new Crawler({
 
 
 // library
-function addToCrawlerQueue(link) {
+function addToCrawlerQueue(freshLink) {
+    const link = freshLink.trim();
+
     //images todo-in так наверно не совсем правильно
     const extension = link.substr(link.length - 4);
     const conditionToAddToQueue =
@@ -76,18 +96,12 @@ function addToCrawlerQueue(link) {
         && extension !== '.gif';
 
     if (conditionToAddToQueue){
-        //log(`add to queue : ${link}\n`);
-        //console.log(pagesVisited);
+
         c.queue(link);
 
         exploredPages.push(link);
 
-        if (link === 'https://kodi-professional.ua/kosmetika-spa/uhod-za-rukami/piling-s-fruktovymi-kislotami-dlya-ruk-i-nog200-ml/') {
-            log('adding ' + link);
-        }
-
         const sql = `INSERT INTO page SET site_id = ${site.id}, uri = ${db.escape(link)}`;
-        fileLog.info(sql);
         db.query(sql);
     }
 }
@@ -115,4 +129,8 @@ function collectInternalLinks($) {
             addToCrawlerQueue(link);
 
     });
+}
+
+function getExploredNew() {
+    return exploredPages.length - startExplored;
 }
