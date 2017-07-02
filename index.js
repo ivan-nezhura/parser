@@ -7,19 +7,25 @@ const URL = require('url-parse');
 const db = require('./db');
 const pageWork = require('./pageWorker');
 
+
 /*const site = {
     id : 1,
     url : 'http://eapermanent.com/'
 };*/
 
-const site = {
+/*const site = {
     id : 2,
     url : 'https://kodi-professional.kz/'
+};*/
+
+const site = {
+    id : 3,
+    url : 'https://kodi-professional.ua/'
 };
 
 /*const site = {
-    id : 3,
-    url : 'https://kodi-professional.ua/'
+    id : 4,
+    url : 'https://kvadratura.ua/'
 };*/
 
 // getting start url
@@ -54,8 +60,9 @@ const baseUrl = url.protocol + "//" + url.hostname;
 
 
 const c = new Crawler({
-    maxConnections : 250,
-    //rateLimits:100,
+    maxConnections : 100,
+    rateLimits: 50,
+    retries:2,
     callback : function (error, result, $) {
         if(error){
             console.error(error);
@@ -63,11 +70,12 @@ const c = new Crawler({
             pagesVisited.push(result.options.uri);
 
             // analyse page
-            pageWork(site.id, result, $);
+            //pageWork(site.id, result, $);
 
             if ($) collectInternalLinks($);
 
             log(`VISITED : ${Object.keys(pagesVisited).length}, REMAINING : ${c.queueSize}, TOTAL EXPLORED NEW : ${getExploredNew()}\n`);
+            log(`Memory usage: rss - ${parseInt(process.memoryUsage().rss/1048000)} m, heapTotal - ${parseInt(process.memoryUsage().heapTotal/1048000)} m, heapUsed - ${parseInt(process.memoryUsage().heapUsed/1048000)} m`);
         }
     },
     onDrain : function () {
